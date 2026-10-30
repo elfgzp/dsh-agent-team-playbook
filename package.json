@@ -27,5 +27,15 @@
     "prompt",
     "playbook"
   ],
-  "license": "MIT"
+  "packageManager": "pnpm@10.32.1",
+  "license": "MIT",
+  "dependencies": {
+    "@deepseek-ai/schemastery": "~3.18.5"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-agent": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-session": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-system-prompt": "0.2.1-rc.3",
+    "@deepseek-ai/cordis": "~4.0.5"
+  }
 }

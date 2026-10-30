@@ -45,6 +45,31 @@
 
 ```bash
 git clone https://github.com/elfgzp/dsh-agent-team-playbook.git
+cd dsh-agent-team-playbook
+pnpm install --prod      # ⚠️ 关键步骤，不能跳过（见下方说明）
+```
+
+> **为什么必须 `pnpm install`**：`plugin_manager` 用 `link:` 协议安装本地目录，
+> 此时依赖**不会**从 profile 的 `node_modules` 解析，而是从插件自己的目录解析。
+> 跳过这一步会在启动时报：
+> ```
+> failed to import: Error [ERR_MODULE_NOT_FOUND]:
+>   Cannot find package '@deepseek-ai/schemastery' imported from .../lib/index.js
+> ```
+> 这个错误发生在"安装成功但 application: failed"时，容易被误判为代码问题。
+>
+> **它藏的第二个坑**：`link:` 安装**也不会**帮你装 `peerDependencies`。
+> 本包把 `@deepseek-ai/dsh-*` 声明为 `peerDependencies`（它们由宿主提供），
+> 但 pnpm 的 `autoInstallPeers` 会在本地 `node_modules/` 里也放一份，
+> 所以 `pnpm install --prod` 是**唯一**能让 `lib/index.js` 找到它们的步骤。
+> `pnpm-lock.yaml` 已提交，锁定到具体版本，保证不同机器结果一致。
+
+装完可以用一行确认依赖解析正常（不依 DS 运行时）：
+
+```bash
+node --input-type=module -e "const m=await import('./lib/index.js'); \
+  console.log(Object.keys(m), m.inject)"
+# 期望输出: [ 'Config', 'apply', 'inject' ] [ 'systemPrompt', 'agents' ]
 ```
 
 然后用 `plugin_manager` 从本地目录安装：
