@@ -1,0 +1,5 @@
+- insert:
+    - id: agent-team-playbook
+      name: dsh-agent-team-playbook
+      config:
+        enabled: true

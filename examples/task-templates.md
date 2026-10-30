@@ -35,7 +35,7 @@
 - 语言：中文回复，代码注释中文
 
 ## 已有信息（省去你自己找）
-- 关键文件：internal/meta/repo/db/repo.go:490 是现有的 LIKE 查询
+- 关键文件：src/storage/repository.go:120 是现有的查询入口
 - 已确认结论：<别人验证过的事实，避免重复调研>
 - 已知坑：<踩过的坑>
 
@@ -79,7 +79,7 @@ team_task_create({
 team_task_create({
   "subject": "[implementing] 实现",
   "description": "phase=implementing role=dev\n产物：代码 + 单测 + 单测执行证据",
-  "write_scopes": ["internal/search/"],
+  "write_scopes": ["src/search/"],
   "blocked_by": ["task-2"]
 })
 
@@ -145,10 +145,10 @@ dev 已经实现 bigram 倒排表，单测全绿。现在需要独立找问题�
 你是对抗性审查者。**目标是找出它的缺陷，不是确认它没问题。**
 
 ## 具体任务
-1. 通读 tmp/research/impl-plan.md 和 internal/search/ 下全部代码
+1. 通读 docs/impl-plan.md 和 src/search/ 下全部代码
 2. 重点攻击：
    - 中文叠词（`哈哈哈`、`看看`）
-   - 中英文混排（`ITFS测试空间`）
+   - 中英文混排（`Product测试空间`）
    - 空格/标点边界（`测试 空间`）
    - 单字查询、超长名称
 3. 每发现一个问题，**写一个能复现的最小用例**（不要只描述）

@@ -1,51 +1,117 @@
-# DSH Agent Teams 实战手册
+# Agent Teams Playbook
 
-> 面向使用者的 Agent Teams 实践指南，补官方 README 没覆盖的**决策与踩坑**。
->
-> **本文非官方文档。** 上游是 [`deepseek-ai/deepseek-harness`](https://github.com/deepseek-ai/deepseek-harness)（public, MIT），
-> 本文所有事实以 tag **`dsh-v0.2.1-rc.3`** 的源码为准，每条结论标注 `文件:行号` 可自行核验。
-> 上游在演进（撰写时 master 已到 `0.2.2-alpha.2`），若结论过期以源码为准。
+一个 DeepSeek Harness 插件（bundle）：**把 Agent Teams 的硬性操作规则注入每个会话**，
+让接管 Team 的 agent 在动手前就知道哪些路走不通。
 
----
+> 解决什么问题：Agent Teams 有一批"官方 README 没写、踩了才知道"的约束——名额不可回收、
+> interrupt 不释放成员、写作用域只是提示不是锁、队友默认看不到你的历史、
+> 无活跃队友时 `wait_agent` 会立刻返回而不是等待。这些约束**出错时没有报错**，
+> 只有行为异常。本插件把它们变成注入到系统提示里的守则。
 
-## 目录
-
-| 文档 | 内容 | 什么时候看 |
-|---|---|---|
-| **本 README** | 决策树、名额规划、派活、写作用域、速查表 | 开始用之前通读 |
-| [`docs/task-state-machine.md`](docs/task-state-machine.md) | 三态扩展为「规划中/实现中/测试中」的方案与边界 | 需要更细的进度表达时 |
-| [`docs/roles.md`](docs/roles.md) | pm / arch / dev / sdet / qa 角色契约与验收证据要求 | 建 Team 前定分工 |
-| [`examples/task-templates.md`](examples/task-templates.md) | 5 个可直接复制的任务模板 + 派活自查清单 | 每次派活前 |
+**非官方项目**，与 `deepseek-ai` 无隶属关系。事实依据上游 tag `dsh-v0.2.1-rc.3` 源码核验，
+详见文末「设计依据」。
 
 ---
 
-## 这是什么
+## 它做了什么
 
-DSH 的 Agent Teams 让一个 Lead agent 可以创建多个持久化 teammate，通过**点对点消息**和**共享任务板**协作，全部状态经 journal 持久化，重启可恢复。
+注册一个**有序的系统提示段落**（`team-playbook:rules`，order `650`），
+为每个 agent 注入六条规则：
 
-四个包的关系（`agent-team-profile` 是聚合层）：
+| 规则 | 约束内容 |
+|---|---|
+| 先规划 roster 再召人 | 名册只增不减：inactive 成员、失败 spawn 都持续占名额；名字全会话唯一 |
+| 写作用域是提示不是锁 | 重叠只报 warning，不阻止写入；并发必须按目录切分 |
+| 派活必须自带完整上下文 | 队友默认 fresh context，看不到你的历史 |
+| 用依赖表达顺序，别用标签 | `blocked_by` 是唯一强制的顺序机制；文本状态标签不可强制/不可筛选 |
+| 正确解读队友状态 | `inactive` ≠ 完成；`send_message` 成功 ≠ 对方已处理 |
+| 只报告已验证的结果 | 不能因为队友说成功就认为成功 |
+
+`650` 这个位置紧接上游 `TEAM_POLICY`(600) 之后、`PTC_ONLY`(800) 之前，
+读起来是 Team 策略的延续，不会割裂后续工具段落。
+
+## 它不做什么
+
+明确边界，避免误期待：
+
+- **不新增任何工具**。这是纯提示注入，不改 Team 的运行时行为。
+- **不强制任何流程**。软状态标签、写作用域重叠，仍然只是提示。
+- **不做 UI**。没有 client 半边，不加面板/按钮。
+- **不修改上游源码**。依赖上游 `@deepseek-ai/dsh-experimental-agent-team` 原样工作。
+
+## 安装
+
+要求：DeepSeek Harness `0.2.1-rc.3`（走 `systemPrompt` + `agents` 两个服务）。
+
+```bash
+git clone https://github.com/elfgzp/dsh-agent-team-playbook.git
+```
+
+然后用 `plugin_manager` 从本地目录安装：
+
+```jsonc
+{
+  "action": "install_bundle",
+  "target": "/absolute/path/to/dsh-agent-team-playbook"
+}
+```
+
+安装后：
+
+- 在 **插件详情** 里应看到标题「Agent Teams 操作守则」与对应描述（来自 `locale/*.json`）
+- 已有会话的 agent 会立即生效；新创建的 teammate 也会自动获得该段落
+- 卸载用 `remove_bundle`，或在 `set_bundle` 里禁用
+
+> 目录安装是软链接到 checkout，改完 `lib/index.js` 后需重新加载才生效
+> （替换已安装包需要重启，因为要加载新的 JS 模块代际）。
+
+## 验证它真的生效
+
+这是提示注入插件，没有按钮可点，所以要**从提示内容反查**。三种方式：
+
+1. **查已注册的段落**（不改运行时状态）：
+
+   ```jsonc
+   { "platform": "host", "provider": "Config", "method": "listConfigs",
+     "input": { "name": "dsh-agent-team-playbook" } }
+   ```
+
+2. **看插件行的 `application` 字段**：`applied` 才算真正激活；
+   `overridden` 表示被更高优先级层覆盖，`restart-required` 表示尚未生效。
+
+3. **在会话里观察**：新开会话后，让 agent 复述「Agent Teams 有几条操作规则」，
+   应答出上表六条。这是端到端确认，比看配置更可信。
+
+> 需要说明的限制：段落已注册 ≠ 用户一定看到了预期文本。渲染效果取决于
+> 提示组装，本仓库不含自动化断言。
+
+## 配置
+
+| 键 | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| `enabled` | boolean | `true` | 置 `false` 时不注册任何段落（等价于禁用） |
+
+## 仓库结构
 
 ```
-@deepseek-ai/dsh-experimental-agent-team-profile    聚合层：cordis.patch.yml
-├── @deepseek-ai/dsh-experimental-agent-team        核心服务：roster / 任务板 / 消息 / journal
-├── @deepseek-ai/dsh-experimental-tool-agent-team   模型侧 9 个工具 + 2 个 system-prompt 段
-└── @deepseek-ai/dsh-experimental-client-ui-agent-team   Web 侧 UI
+package.json          bundle 清单：dsh.bundle.patch 指向 cordis.patch.yml
+cordis.patch.yml      Loader 补丁：插入 agent-team-playbook 这一行
+lib/index.js          插件实现：为每个 agent 注册一个 system prompt 段落
+locale/{zh,en}.json   插件管理器显示的标题与描述
+icon.svg              插件图标
+docs/                 设计说明与实战细节（非插件运行时文件）
+examples/             可复制的任务模板
 ```
 
-`agent-team-profile` 的 patch 文件同时**禁用了 4 个单 agent 工具**（`tool-subagent`、`tool-subagent-fork`、`tool-subagent-control`、`tool-subagent-list-agents`），把直接委派收敛到 Team 工具上——所以启用 Team 后 `subagent` 不再是选项。
-
-### 提供哪些能力
-
-| 能力 | 工具 | 说明 |
-|---|---|---|
-| 建成员 | `spawn_teammate` | 仅 Lead 可调；`context: fresh \| fork` |
-| 点对点通信 | `send_message` | 任意成员之间；Lead ↔ teammate、teammate ↔ teammate |
-| 看名册 | `list_agents` | |
-| 等进展 | `wait_agent` | 等下一个状态/消息/任务变化 |
-| 打断 | `interrupt_agent` | 仅 Lead；**不释放名额**，见 §2（`interrupt` 配置项默认为 `true`，设为 `false` 可整体关闭该工具，见 `tool-agent-team/src/index.ts:28`） |
-| 任务板 | `team_task_create` / `team_task_list` / `team_task_get` / `team_task_update` | 共享 DAG，含 `blocked_by` 依赖与 `expected_revision` CAS 并发控制 |
+`files` 只包含运行必需的 4 项（`lib/index.js`、`cordis.patch.yml`、`locale/*.json`、`icon.svg`），
+`docs/` 与 `examples/` 是随仓库分发的文档，不参与打包。
 
 ---
+
+# 设计依据与实战细节
+
+以下内容解释**为什么是这六条规则**。每条都可在上游源码中核验，
+命令见 [§10 获取源码与核验本文](#10-获取源码与核验本文)。
 
 ## 1. 什么时候该用 Team，什么时候不该
 
@@ -324,8 +390,8 @@ const authorizeOwner = (): void => {
 
 ## 4. 角色定义
 
-角色契约见 [`docs/roles.md`](docs/roles.md)。它改编自 ITFS 项目的 `docs/agents/roles.md`，
-保留 pm / arch / dev / sdet / qa 五角色的**输入、产物、红线、验收证据**结构。
+角色契约见 [`docs/roles.md`](docs/roles.md)。它提供 pm / arch / dev / sdet / qa 五个角色的
+**输入、产物、红线、验收证据**结构，可直接套用到任意项目。
 
 核心思想：**角色不越界，越界的产物不予验收。** 每个角色必须产出可复现的验证证据，
 "写完了"不算完成。

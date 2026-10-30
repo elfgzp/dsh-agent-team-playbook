@@ -1,0 +1,31 @@
+{
+  "name": "dsh-agent-team-playbook",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Inject Agent Teams operating conventions into every session: roster planning, write-scope discipline, fresh-context task templates, and coordination traps.",
+  "type": "module",
+  "exports": {
+    ".": "./lib/index.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "lib/index.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "agent-teams",
+    "prompt",
+    "playbook"
+  ],
+  "license": "MIT"
+}
