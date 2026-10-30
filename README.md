@@ -41,7 +41,14 @@
 
 ## 安装
 
-要求：DeepSeek Harness `0.2.1-rc.3`（走 `systemPrompt` + `agents` 两个服务）。
+要求：DeepSeek Harness `>=0.2.1-rc.3 <0.3.0`（走 `systemPrompt` + `agents` 两个服务）。
+已实测：`0.2.1-rc.3`、`0.2.1-rc.5`。
+
+> 版本约束写在 `package.json` 的 `peerDependencies` 里，DSH 安装时会据此校验。
+> **不要写死精确版本**：早期版本写成 `"0.2.1-rc.3"`，Harness 升级到 `rc.5` 后插件直接
+> 报 `incompatible-version`、`rows: []`，一行都不加载。区间写法对 `0.2.1-rc.x` 与
+> `0.2.x` 正式版都成立；`0.2.2-alpha.x` 这类预发布版按 semver 默认不匹配，
+> 遇到时需自行确认 API 未变再放宽。
 
 ```bash
 # ⚠️ 务必 clone 到持久目录（不要用 /tmp —— 见下方「源目录不能删」）
@@ -166,6 +173,7 @@ node --input-type=module -e "const m=await import('./lib/index.js'); \
 | `application: overridden` | 被更高优先级的层覆盖 | 检查是否有同名 patch 行 |
 | `application: restart-required` | 代码未重新加载 | 重启 Harness（替换已装包必须重启） |
 | 上次能用、重启后突然 `failed`，且未改过任何代码 | **源目录被删/移动**（`link:` 的目标消失了） | 确认目录还在；不在就 clone 到持久目录重装 |
+| `list_bundles` 里本插件 `error.code: incompatible-version`，`rows: []` | Harness 升级后不满足 `peerDependencies` 的版本约束 | 确认新版本 API 兼容后放宽 `peerDependencies` 区间，`remove_bundle` + `install_bundle` |
 | 条目不存在 | patch 没插入 | 确认 `package.json` 的 `dsh.bundle.patch` 指向正确 |
 
 `ERR_MODULE_NOT_FOUND` 是最容易误判的一个 —— 它发生在"安装成功但激活失败"时，
