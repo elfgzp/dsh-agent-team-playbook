@@ -48,8 +48,52 @@
 cd ~/Work                                    # 或任何你长期保留的位置
 git clone https://github.com/elfgzp/dsh-agent-team-playbook.git
 cd dsh-agent-team-playbook
-pnpm install --prod      # ⚠️ 关键步骤，不能跳过（见下方说明）
+
+# ⚠️ 关键步骤，不能跳过。若上层目录有 pnpm-workspace.yaml 见「安装陷阱」
+pnpm install --prod
+
+# ✅ 装完立刻验证依赖真的装上了，再去 install_bundle
+node --input-type=module -e "const m=await import('./lib/index.js'); \
+  console.log('deps OK', Object.keys(m), m.inject)"
+# 期望: deps OK [ 'Config', 'apply', 'inject' ] [ 'systemPrompt', 'agents' ]
 ```
+
+**这三步顺序不要调换**：`pnpm install` → 自检 → `install_bundle`。
+把自检放在 `install_bundle` **之前**，能让"依赖没装上"当场暴露；
+若跳过自检直接装，症状会变成 `application: failed` + `ERR_MODULE_NOT_FOUND`，
+而这个报错**不提示真实原因**，容易误判成代码 bug（见「故障排查」）。
+
+### ⚠️ 安装陷阱：上层目录的 `pnpm-workspace.yaml`
+
+**这是实测踩到的静默失败**，也是最难排查的一类：
+
+如果你的某个**上层目录**（如 `~`、`~/Work`）存在 `pnpm-workspace.yaml`，
+pnpm 会把那个目录认作 workspace 根，在子目录里执行 `pnpm install` 会输出：
+
+```
+No projects found in "/Users/you"
+```
+
+然后**什么都不装，而且退出码是 0**。因为 exit code 正常，`&&` 链、
+CI 脚本、`set -e` 都不会报错，你以为装好了，直到 `install_bundle` 才失败。
+
+> 验证：`ls node_modules/` 不存在或为空即命中此陷阱。
+
+**解法**（任选其一，推荐第一个）：
+
+```bash
+# 1. 显式忽略 workspace —— 最直接，实测有效
+pnpm install --prod --ignore-workspace
+
+# 2. 把仓库 clone 到不受 workspace 配置影响的位置
+#    （确保从仓库往上到 / 都没有 pnpm-workspace.yaml）
+
+# 3. 临时移走上层配置
+mv ~/pnpm-workspace.yaml /tmp/ && pnpm install --prod && mv /tmp/pnpm-workspace.yaml ~/
+```
+
+> 注意 `--ignore-workspace-root-check` **不是**这个场景的选项，
+> pnpm 会直接报 `Unknown option`。
 
 ### 🔴 源目录不能删
 
@@ -117,7 +161,8 @@ node --input-type=module -e "const m=await import('./lib/index.js'); \
 | 现象 | 含义 | 处置 |
 |---|---|---|
 | `application: applied` | 已激活 | 正常 |
-| `application: failed` + `ERR_MODULE_NOT_FOUND` | 依赖没装进插件目录 | 回插件目录 `pnpm install --prod` 再装 |
+| `application: failed` + `ERR_MODULE_NOT_FOUND`，且 `node_modules/` 不存在或为空 | **依赖从未装上**：多因上层目录有 `pnpm-workspace.yaml`（见「安装陷阱」） | `pnpm install --prod --ignore-workspace` |
+| `application: failed` + `ERR_MODULE_NOT_FOUND`，但 `node_modules/` 有包 | 装过但被删/不完整 | 回插件目录重跑 install |
 | `application: overridden` | 被更高优先级的层覆盖 | 检查是否有同名 patch 行 |
 | `application: restart-required` | 代码未重新加载 | 重启 Harness（替换已装包必须重启） |
 | 上次能用、重启后突然 `failed`，且未改过任何代码 | **源目录被删/移动**（`link:` 的目标消失了） | 确认目录还在；不在就 clone 到持久目录重装 |
