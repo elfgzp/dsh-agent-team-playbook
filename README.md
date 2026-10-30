@@ -90,6 +90,21 @@ node --input-type=module -e "const m=await import('./lib/index.js'); \
 > 目录安装是软链接到 checkout，改完 `lib/index.js` 后需重新加载才生效
 > （替换已安装包需要重启，因为要加载新的 JS 模块代际）。
 
+### 故障排查：装上了但没生效
+
+`install_bundle` 返回成功，不代表插件真的在跑。按这个顺序查：
+
+| 现象 | 含义 | 处置 |
+|---|---|---|
+| `application: applied` | 已激活 | 正常 |
+| `application: failed` + `ERR_MODULE_NOT_FOUND` | 依赖没装进插件目录 | 回插件目录 `pnpm install --prod` 再装 |
+| `application: overridden` | 被更高优先级的层覆盖 | 检查是否有同名 patch 行 |
+| `application: restart-required` | 代码未重新加载 | 重启 Harness（替换已装包必须重启） |
+| 条目不存在 | patch 没插入 | 确认 `package.json` 的 `dsh.bundle.patch` 指向正确 |
+
+`ERR_MODULE_NOT_FOUND` 是最容易误判的一个 —— 它发生在"安装成功但激活失败"时，
+很容易被当成代码 bug 去查 `lib/index.js`，实际是包元数据和安装步骤的问题。
+
 ## 验证它真的生效
 
 这是提示注入插件，没有按钮可点，所以要**从提示内容反查**。三种方式：
