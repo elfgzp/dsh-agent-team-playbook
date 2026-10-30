@@ -42,8 +42,8 @@ DSH 的 Agent Teams 让一个 Lead agent 可以创建多个持久化 teammate，
 | 点对点通信 | `send_message` | 任意成员之间；Lead ↔ teammate、teammate ↔ teammate |
 | 看名册 | `list_agents` | |
 | 等进展 | `wait_agent` | 等下一个状态/消息/任务变化 |
-| 打断 | `interrupt_agent` | 仅 Lead；**不释放名额**，见 §2 |
-| 任务板 | `team_task_create` / `list` / `get` / `update` | 共享 DAG，含依赖与 CAS 并发控制 |
+| 打断 | `interrupt_agent` | 仅 Lead；**不释放名额**，见 §2（`interrupt` 配置项默认为 `true`，设为 `false` 可整体关闭该工具，见 `tool-agent-team/src/index.ts:28`） |
+| 任务板 | `team_task_create` / `team_task_list` / `team_task_get` / `team_task_update` | 共享 DAG，含 `blocked_by` 依赖与 `expected_revision` CAS 并发控制 |
 
 ---
 
