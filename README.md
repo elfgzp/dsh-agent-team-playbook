@@ -44,10 +44,26 @@
 要求：DeepSeek Harness `0.2.1-rc.3`（走 `systemPrompt` + `agents` 两个服务）。
 
 ```bash
+# ⚠️ 务必 clone 到持久目录（不要用 /tmp —— 见下方「源目录不能删」）
+cd ~/Work                                    # 或任何你长期保留的位置
 git clone https://github.com/elfgzp/dsh-agent-team-playbook.git
 cd dsh-agent-team-playbook
 pnpm install --prod      # ⚠️ 关键步骤，不能跳过（见下方说明）
 ```
+
+### 🔴 源目录不能删
+
+`link:` 协议安装**不会复制文件**，只在 profile 里登记一条指向该目录的链接。
+因此 **clone 出来的目录是插件的一部分**：
+
+- 删掉它 → 下次启动 Harness 时插件加载失败，插件行变为 `application: failed`
+- 移动它 → 同样失效（链接仍指向旧路径）
+
+**典型踩法**：把仓库 clone 到 `/tmp` 做试验。macOS/Linux 会定期清理 `/tmp`，
+插件就在某次重启后随机失效，而**报错信息不会提示"源目录已消失"**，
+排查成本很高（本插件开发过程中就踩过一次）。
+
+请 clone 到 `~/Work/`、`~/src/` 之类的持久位置。
 
 > **为什么必须 `pnpm install`**：`plugin_manager` 用 `link:` 协议安装本地目录，
 > 此时依赖**不会**从 profile 的 `node_modules` 解析，而是从插件自己的目录解析。
@@ -87,8 +103,12 @@ node --input-type=module -e "const m=await import('./lib/index.js'); \
 - 已有会话的 agent 会立即生效；新创建的 teammate 也会自动获得该段落
 - 卸载用 `remove_bundle`，或在 `set_bundle` 里禁用
 
-> 目录安装是软链接到 checkout，改完 `lib/index.js` 后需重新加载才生效
-> （替换已安装包需要重启，因为要加载新的 JS 模块代际）。
+> 目录安装是软链接到 checkout：好处是改完 `lib/index.js` 重装即生效，
+> 代价是 **checkout 必须一直存在**（见上文「源目录不能删」）。
+> 替换已安装包需要重启，因为要加载新的 JS 模块代际。
+>
+> 想彻底摆脱"目录必须保留"的约束，可以把插件打包成 tarball 再安装
+> （`pnpm pack`），或用固定 tag 发布 —— 但那样每次改动都要重新打包。
 
 ### 故障排查：装上了但没生效
 
@@ -100,6 +120,7 @@ node --input-type=module -e "const m=await import('./lib/index.js'); \
 | `application: failed` + `ERR_MODULE_NOT_FOUND` | 依赖没装进插件目录 | 回插件目录 `pnpm install --prod` 再装 |
 | `application: overridden` | 被更高优先级的层覆盖 | 检查是否有同名 patch 行 |
 | `application: restart-required` | 代码未重新加载 | 重启 Harness（替换已装包必须重启） |
+| 上次能用、重启后突然 `failed`，且未改过任何代码 | **源目录被删/移动**（`link:` 的目标消失了） | 确认目录还在；不在就 clone 到持久目录重装 |
 | 条目不存在 | patch 没插入 | 确认 `package.json` 的 `dsh.bundle.patch` 指向正确 |
 
 `ERR_MODULE_NOT_FOUND` 是最容易误判的一个 —— 它发生在"安装成功但激活失败"时，
