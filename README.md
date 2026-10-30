@@ -591,14 +591,24 @@ git sparse-checkout set packages/experimental/agent-team \
   packages/experimental/client-ui-agent-team \
   packages/experimental/agent-team-profile
 
-# 核验本文的关键结论
-grep -n "DEFAULT_MAX_MEMBERS\|DEFAULT_MAX_TASKS" packages/experimental/agent-team/src/index.ts
-grep -n "Team member limit" packages/experimental/agent-team/src/roster.ts
-grep -n "role: 'lead'" packages/experimental/agent-team/src/projection.ts
-grep -n "TeamTaskStatus =" packages/experimental/agent-team/src/types.ts
+# 核验本文的关键结论（括号内是应看到的行号）
+grep -n "DEFAULT_MAX_MEMBERS\|DEFAULT_MAX_TASKS" \
+  packages/experimental/agent-team/src/index.ts                    # 42, 43, 44
+grep -n "members.length >= this.maxMembers" \
+  packages/experimental/agent-team/src/roster.ts                   # 257
+grep -n "member.name === name" \
+  packages/experimental/agent-team/src/roster.ts                   # 254（名字永久占用）
+grep -n "role: 'lead'" \
+  packages/experimental/agent-team/src/projection.ts               # 344（lead 单独投影）
+grep -n "TeamTaskStatus =" \
+  packages/experimental/agent-team/src/types.ts                    # 72（只有 3 个流程态）
+grep -n "function statusKey" \
+  packages/experimental/client-ui-agent-team/src/client/TeamAction.tsx  # 33（UI 封闭 switch）
 grep -rn "appendAndFlush(root, '" packages/experimental/agent-team/src/ | \
-  sed "s/.*'\([^']*\)'.*/\1/" | sort -u      # 只有 team/member 和 team/task
+  sed "s/.*'\([^']*\)'.*/\1/" | sort -u
+  # 输出应恰好两行: team/member 与 team/task —— 证明名册无删除事件
 cat packages/experimental/agent-team-profile/cordis.patch.yml
+  # 看到 maxMembers: 8 覆盖了代码默认的 16
 ```
 
 **本地安装产物（`node_modules`）与源码的关系**：npm 包只含 `lib/`（编译产物），
